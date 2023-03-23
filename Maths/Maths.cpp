@@ -1,9 +1,4 @@
 ﻿
-#include <iostream>
-#include <stdexcept>
-#include <stack>
-#include <vector>
-#include <string>
 #include "Maths.h";
 
 using namespace std;
@@ -22,16 +17,34 @@ void Component::AddChild(Component* comps) {
     this->oper->childs->push_back(comps);
 }
 
-Component* Component::Parse(vector<char*>* to_parse) {
+vector<char*>* Component::Lexer(string equation) {
+    int i = 0;
+    while ((i = equation.find(' ')) != -1) equation.erase(i, 1);
+    return new vector<char*>();
+}
+
+Component* Component::Parse(vector<char*>& to_parse) {
     auto st = new stack<Component*>();
     Component* cmp = nullptr, *prev = nullptr;
 
-    auto prior = new vector<pair<int, int>*>();
-    PriorityParser(to_parse, prior);
+    auto prior = PriorityParser(to_parse);
 
-    int old_prior = INT_MAX;
-    for (pair<int, int>* pr : *prior) {
-        InsertOperation(pr, to_parse, &st, &cmp, &prev, old_prior);
+    int pre, next, old_prior = INT_MAX;
+    for (int i = 0; i < prior.size(); i++) {
+        pair<int, int>* pr = prior[i];
+
+        if (i == 0) pre = INT_MIN;
+        else pre = prior[i - 1]->first;
+
+        if (i == prior.size() - 1) next = INT_MIN;
+        else next = prior[i + 1]->first;
+
+        InsertOperation(pr, to_parse, st, cmp, prev, old_prior);
+
+        if (pre < cmp->oper->prior)
+            cmp->AddChild(GetValuedComponent(to_parse[pr->second - 1]));
+        if (next < cmp->oper->prior)
+            cmp->AddChild(GetValuedComponent(to_parse[pr->second + 1]));
 
         if(prev != cmp) st->push(cmp);
         prev = cmp;
@@ -44,48 +57,49 @@ Component* Component::Parse(vector<char*>* to_parse) {
     }
 
     delete st;
-    delete prior;
 
     return cmp;
 }
 
 Component* Component::GetValuedComponent(char* to_parse) {
     int i = 0;
-    while (to_parse[i] != '\0') if (to_parse[++i] < '0' || to_parse[i] > '9') return new Component(string(to_parse));
+    while (to_parse[i] != '\0') if (to_parse[i] < '0' || to_parse[i++] > '9') return new Component(string(to_parse));
     return new Component(stoi(string(to_parse)));
 }
 
-void Component::InsertOperation(pair<int, int>* pr, vector<char*>* to_parse, stack<Component*>** st, Component** cmp, Component** prev, int old_prior) {
+void Component::InsertOperation(pair<int, int>* pr, vector<char*>& to_parse, stack<Component*>*& st, Component*& cmp, Component*& prev, int old_prior) {
     if (old_prior == pr->first) {
-        if (IsInvertOperator((*to_parse)[pr->second])) {
-            *cmp = new Component(FunctionType::Inv, old_prior + 1);
-            (*prev)->AddChild(*cmp);
-            (*st)->push(*prev);
+        if (IsInvertOperator(to_parse[pr->second])) {
+            cmp = new Component(FunctionType::Inv, old_prior + 1);
+            prev->AddChild(cmp);
+            st->push(prev);
         }
     }
     else {
         if (old_prior > pr->first) {
-            if ((*st)->empty()) {
-                *cmp = new Component(GetFunctionType((*to_parse)[pr->second]), pr->first);
-                if(*prev) (*cmp)->AddChild(*prev);
+            if (st->empty()) {
+                cmp = CreateOperation(to_parse[pr->second], pr->first, st);
+                if(prev) cmp->AddChild(prev);
+                if (IsInvertOperator(to_parse[pr->second])) cmp = (*cmp->oper->childs)[0];
             }
             else {
-                while (!(*st)->empty() && old_prior > pr->first) {
-                    *prev = (*st)->top();
-                    (*st)->pop();
-                    old_prior = (*prev)->oper->prior;
+                while (!st->empty() && old_prior > pr->first) {
+                    prev = st->top();
+                    st->pop();
+                    old_prior = prev->oper->prior;
                 }
                 InsertOperation(pr, to_parse, st, cmp, prev, old_prior);
             }
         }
         else {
-            *cmp = new Component(GetFunctionType((*to_parse)[pr->second]), pr->first);
-            (*prev)->AddChild(*cmp);
+            cmp = CreateOperation(to_parse[pr->second], pr->first, st);
+            prev->AddChild(cmp);
+            if(IsInvertOperator(to_parse[pr->second])) cmp = (*cmp->oper->childs)[0];
         }
     }
 }
 
-Component* Component::CreateOperation(char* elem, int prior, stack<Component*>** st) {
+Component* Component::CreateOperation(char* elem, int prior, stack<Component*>*& st) {
     Component* cmp = NULL;
     switch (elem[0])
     {
@@ -94,18 +108,16 @@ Component* Component::CreateOperation(char* elem, int prior, stack<Component*>**
         break;
     case '-':
         cmp = new Component(FunctionType::Sum, prior);
-        (*st)->push(cmp);
+        st->push(cmp);
         cmp->AddChild(new Component(FunctionType::Inv, prior + 1));
-        cmp = (*cmp->oper->childs)[0];
         break;
     case '*':
         cmp = new Component(FunctionType::Mult, prior);
         break;
     case '/':
         cmp = new Component(FunctionType::Mult, prior);
-        (*st)->push(cmp);
+        st->push(cmp);
         cmp->AddChild(new Component(FunctionType::Inv, prior + 1));
-        cmp = (*cmp->oper->childs)[0];
         break;
     default:
         throw std::invalid_argument("Несуществующий оператор");
@@ -113,46 +125,26 @@ Component* Component::CreateOperation(char* elem, int prior, stack<Component*>**
     return cmp;
 }
 
-Component* Component::RecursiveParsing(vector<char*>* to_parse, pair<int, int>* priorities) 
-{
-    return nullptr;
-}
-
 inline bool Component::IsInvertOperator(char* c) noexcept { return c[1] == '\0' && (c[0] == '-' || c[0] == '/'); };
 
 inline bool Component::IsOperator(char* s) noexcept { return s[1] == '\0' && (s[0] == '+' || s[0] == '-' || s[0] == '/' || s[0] == '*' || s[0] == '(' || s[0] == ')'); }
 
-FunctionType Component::GetFunctionType(char* s) {
-    switch (s[0])
-    {
-    case '+':
-        return FunctionType::Sum;
-    case '-':
-        return FunctionType::Subtr;
-    case '/':
-        return FunctionType::Div;
-    case '*':
-        return FunctionType::Mult;
-    default:
-        throw std::invalid_argument("Несуществующий оператор");
-    }
-}
-
-void Component::PriorityParser(vector<char*>* to_parse, vector<pair<int, int>*>* priorities) {
+vector<pair<int, int>*>& Component::PriorityParser(vector<char*>& to_parse) {
+    auto priorities = new vector<pair<int, int>*>();
     int prev_ptr = 0, cur_ptr = 0, priority_lvl = 0;
-    while (prev_ptr < to_parse->size()) {
-        if (cur_ptr < to_parse->size() && !IsOperator((*to_parse)[cur_ptr])) cur_ptr++;
-        if (cur_ptr == to_parse->size()) break;
+    while (prev_ptr < to_parse.size()) {
+        if (cur_ptr < to_parse.size() && !IsOperator(to_parse[cur_ptr])) cur_ptr++;
+        if (cur_ptr == to_parse.size()) break;
 
-        switch ((*to_parse)[cur_ptr][0])
+        switch (to_parse[cur_ptr][0])
         {
         case '+':
         case '-':
-            priorities->push_back(new pair<int, int>(priority_lvl * to_parse->size(), cur_ptr));
+            priorities->push_back(new pair<int, int>(priority_lvl * to_parse.size(), cur_ptr));
             break;
         case '/':
         case '*':
-            priorities->push_back(new pair<int, int>(2 + priority_lvl * to_parse->size(), cur_ptr));
+            priorities->push_back(new pair<int, int>(2 + priority_lvl * to_parse.size(), cur_ptr));
             break;
         case '(':
             priority_lvl++;
@@ -165,33 +157,5 @@ void Component::PriorityParser(vector<char*>* to_parse, vector<pair<int, int>*>*
         cur_ptr++;
         prev_ptr = cur_ptr;
     }
-}
-
-vector<char*>* string_split(string s, const char* delimeter) {
-    vector<char*>* result = new vector<char*>();
-    char* str = const_cast<char*>(s.c_str()), *buf = nullptr, *temp = str;
-    int i = 0;
-    
-    temp = strtok_s(str, delimeter, &buf);
-    while (temp != NULL) 
-    {
-#pragma warning(suppress : 4996)
-        result->push_back(strdup(temp));
-        temp = strtok_s(NULL, delimeter, &buf);
-    }
-    return result;
-}
-
-
-int main()
-{
-    setlocale(LC_ALL, "Russian");
-    string input = "a * ( b + 2 ) / ( 3 + x ) / 2 - 5";
-    vector<char*>* c = string_split(input, " ");
-
-    Component* comp = Component::Parse(c);
-    //CompType cc = c->GetType();
-
-    int i = 0;
-    i++;
+    return *priorities;
 }

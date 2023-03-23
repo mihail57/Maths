@@ -1,6 +1,11 @@
 #pragma once
 
 #include <iostream>
+#include <iostream>
+#include <stdexcept>
+#include <stack>
+#include <vector>
+#include <string>
 
 using namespace std;
 
@@ -9,14 +14,12 @@ struct Value;
 struct Function;
 
 enum class FunctionType {
-    Sum = 0, Subtr, Neg, Brack, Mult, Div, Inv, Pow, Log
+    Sum = 0, Mult, Inv, Pow, Exp
 };
 
 enum class CompType {
     Var, Val, Op
 };
-
-bool Comparer(pair<int, int> a, pair<int, int> b) { return a.first < b.first; };
 
 union Component
 {
@@ -25,8 +28,6 @@ public:
     Value* val;
     Function* oper;
 
-    Component() { };
-
     Component(string s);
     Component(double d);
     Component(FunctionType o, int p);
@@ -34,22 +35,20 @@ public:
     inline CompType GetType() noexcept;
     void AddChild(Component* comps);
 
-    static Component* Parse(vector<char*>* to_parse);
+    static vector<char*>* Lexer(string equation);
+    static Component* Parse(vector<char*>& to_parse);
 
 private:
     static Component* GetValuedComponent(char* to_parse);
     
     static inline bool IsOperator(char* s) noexcept;
-    static FunctionType GetFunctionType(char* s);
-    static void PriorityParser(vector<char*>* to_parse, vector<pair<int, int>*>* priorities);
+    static vector<pair<int, int>*>& PriorityParser(vector<char*>& to_parse);
 
-    static Component* RecursiveParsing(vector<char*>* to_parse, pair<int, int>* priorities);
-
-    static Component* CreateOperation(char* elem, int prior, stack<Component*>** st);
+    static Component* CreateOperation(char* elem, int prior, stack<Component*>*& st);
 
     static inline bool IsInvertOperator(char* c) noexcept;
 
-    static void InsertOperation(pair<int, int>* pr, vector<char*>* to_parse, stack<Component*>** st, Component** cmp, Component** prev, int old_prior);
+    static void InsertOperation(pair<int, int>* pr, vector<char*>& to_parse, stack<Component*>*& st, Component*& cmp, Component*& prev, int old_prior);
 };
 
 struct Variable
