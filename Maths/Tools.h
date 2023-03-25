@@ -1,11 +1,14 @@
 #pragma once
 #include <string>
 #include <vector>
-#include "Maths.h"
+
+using namespace std;
 
 namespace Tools {
+	inline char* string_conv(string s);
 	vector<char*>& string_split(string s, const char* delimeter);
 
-	void test_print_tree(Component* cmp, int tab = 0);
+	template <class T>
+	void swap(T& first, T& second);
 }
 

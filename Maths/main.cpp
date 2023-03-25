@@ -9,15 +9,16 @@ using namespace Tools;
 int main()
 {
     setlocale(LC_ALL, "Russian");
-    string input = "a * ( b + 2 ) / ( 3 + x ) / ( 2 - x ) - 5";
-    vector<char*> c = Tools::string_split(input, " ");
-    Component::Lexer(input);
+    string input = "1/(ab)";
 
-    Component* comp = Component::Parse(c);
-    //CompType cc = c->GetType();
+    vector<char*>& cmp = Component::Lexer(input);
+    if (cmp.size() > 0) {
+        Component* comp = Component::Parse(cmp);
+        //CompType cc = c->GetType();
 
-    test_print_tree(comp);
-    delete comp;
+        comp->test_print_tree();
+        delete comp;
+    }
 
     int i = 0;
     i++;

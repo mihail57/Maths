@@ -6,81 +6,106 @@
 #include <stack>
 #include <vector>
 #include <string>
+#include "Tools.h"
 
 using namespace std;
 
-struct Variable;
-struct Value;
-struct Function;
+struct priority {
+public:
+    int global_pr;
+    int local_pr;
+    int ptr;
+    priority(int gp, int lp, int pt) { global_pr = gp; local_pr = lp, ptr = pt; }
+};
 
 enum class FunctionType {
-    Sum = 0, Mult, Inv, Pow, Exp
+    Sum = 0, Mult, Pow
 };
 
 enum class CompType {
     Var, Val, Op
 };
 
-union Component
+class Component abstract
 {
 public:
-    Variable* var;
-    Value* val;
-    Function* oper;
+    bool is_inverted = false;
 
-    Component(string s);
-    Component(double d);
-    Component(FunctionType o, int p);
+    CompType GetType() { return type; }
 
-    inline CompType GetType() noexcept;
-    void AddChild(Component* comps);
-
-    static vector<char*>* Lexer(string equation);
+    static vector<char*>& Lexer(string equation);
     static Component* Parse(vector<char*>& to_parse);
+
+    virtual void test_print_tree(int tab = 0) {};
+
+    virtual int get_prior() { return 0; } //Виртуальные функции для Function
+    virtual FunctionType get_func_type() { return (FunctionType)-1; }
+    virtual void set_func_type(FunctionType t) { return; }
+    virtual vector<Component*>& get_childs() { throw new std::invalid_argument("Попытка получить потомков не операции"); }
+    virtual void AddChild(Component* comps, int pos = INT_MAX) { return; }
+
+    void Simplify();
 
 private:
     static Component* GetValuedComponent(char* to_parse);
     
-    static inline bool IsOperator(char* s) noexcept;
     static vector<pair<int, int>*>& PriorityParser(vector<char*>& to_parse);
+    static Component* CreateOperation(char* elem, int prior, bool& invert);
 
-    static Component* CreateOperation(char* elem, int prior, stack<Component*>*& st);
-
+    static inline bool IsOperator(char* s) noexcept;
+    static inline bool IsOperator(char c) noexcept;
     static inline bool IsInvertOperator(char* c) noexcept;
 
-    static void InsertOperation(pair<int, int>* pr, vector<char*>& to_parse, stack<Component*>*& st, Component*& cmp, Component*& prev, int old_prior);
+    static void InsertOperation(pair<int, int>* pr, vector<char*>& to_parse, stack<Component*>*& st, Component*& cmp, Component*& prev, int old_prior, bool& inverted);
+protected:
+    CompType type;
 };
 
-struct Variable
+class Variable : public Component
 {
 public:
-    CompType type;
     char name[5];
+
+    virtual void test_print_tree(int tab = 0);
+    //virtual CompType GetType() { return CompType::Var; }
 
     Variable(string s) { strcpy_s(name, s.substr(0, 4).c_str()); type = CompType::Var; }
     Variable(char* s) { strcpy_s(name, 4, s); type = CompType::Var; }
 };
 
-struct Value
+class Value : public Component
 {
 public:
-    CompType type;
     double value;
+
+    virtual void test_print_tree(int tab = 0);
+    //virtual CompType GetType() { return CompType::Val; }
 
     Value(double d) { value = d; type = CompType::Val; }
 };
 
-struct Function
+class Function : public Component
 {
 public:
-    CompType type;
     FunctionType op;
-    vector<Component*>* childs = new vector<Component*>();
+    vector<Component*> childs = vector<Component*>();
     int prior;
 
-    Function(FunctionType o, int p) {
+    virtual void test_print_tree(int tab = 0);
+    //virtual CompType GetType() { return CompType::Op; }
+
+    Function(FunctionType o, int p, bool inv = false) {
         op = o;
         prior = p;
         type = CompType::Op;
+        is_inverted = inv;
     }
+
+    virtual int get_prior() { return prior; } 
+    virtual FunctionType get_func_type() { return op; }
+    virtual void set_func_type(FunctionType t) { op = t; }
+    virtual vector<Component*>& get_childs() { return childs; }
+    virtual void AddChild(Component* comps, int pos = INT_MAX);
+
+private:
 };
