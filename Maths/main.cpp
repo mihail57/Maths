@@ -1,24 +1,28 @@
 
 #include <iostream>
 #include "Maths.h"
-#include "Tools.h"
+#include "Analyzer.h"
 
 using namespace std;
-using namespace Tools;
+//using namespace Tools;
 
 int main()
 {
     setlocale(LC_ALL, "Russian");
-    string input = "1/(ab)";
-
-    vector<char*>& cmp = Component::Lexer(input);
-    if (cmp.size() > 0) {
+    string input = "a|(!a&b)", error = "";
+    //cin >> input;
+    vector<char*>& cmp = Component::Lexer(input, error);
+    if (error == "") {
         Component* comp = Component::Parse(cmp);
-        //CompType cc = c->GetType();
+        EquationMatcher eq = EquationMatcher("!A|B");
 
+        comp->Simplify();
         comp->test_print_tree();
+
+        eq.FindMatch(comp->get_childs()[0]);
         delete comp;
     }
+    else cout << error;
 
     int i = 0;
     i++;
