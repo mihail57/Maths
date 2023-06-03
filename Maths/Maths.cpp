@@ -4,6 +4,84 @@ using namespace std;
 
 typedef vector<Component*>::iterator comp_iterator;
 
+Component* Component::copy() {
+    Component* result = nullptr;
+    Function* tmp;
+    switch (GetType())
+    {
+    case CompType::Var:
+        result = new Variable(get_name());
+        result->is_inverted = is_inverted;
+        break;
+    case CompType::Val:
+        result = new Value(get_value());
+        result->is_inverted = is_inverted;
+        break;
+    case CompType::Op:
+        tmp = dynamic_cast<Function*>(this);
+        result = new Function(tmp->op, tmp->prior, tmp->is_inverted);
+        for (Component* cmp : get_childs()) result->AddChild(cmp->copy());
+    default:
+        break;
+    }
+    return result;
+}
+
+void get_vars(map<char, bool>& vars, vector<char>* vars_container, Component* c) {
+    if (c->GetType() == CompType::Var) {
+        if (!vars[c->get_name()]) {
+            vars_container->push_back(c->get_name());
+            vars[c->get_name()] = true;
+        }
+        return;
+    }
+
+    if (c->GetType() == CompType::Op) {
+        for (auto cmp : c->get_childs()) get_vars(vars, vars_container, cmp);
+    }
+}
+
+void replace_var(Component* cmp, char name, bool value) {
+    auto& arr = cmp->get_childs();
+    for (int i = 0; i < arr.size(); i++) {
+        if (arr[i]->GetType() == CompType::Op) replace_var(arr[i], name, value);
+        else if (arr[i]->GetType() == CompType::Var && arr[i]->get_name() == name) {
+            bool inv = arr[i]->is_inverted;
+            delete arr[i];
+            arr[i] = nullptr;
+            arr[i] = new Value(value);
+            arr[i]->is_inverted = inv;
+        }
+    }
+}
+
+vector<vector<bool>>* Component::get_truth_table(vector<char>* vars_container) {
+    map<char, bool> vars;
+    get_vars(vars, vars_container, this);
+    int num = pow(2, vars.size());
+
+    auto char_cmp = [](char& a, char& b) { return a < b; };
+    quicksort(*vars_container, char_cmp);
+
+    vector<vector<bool>>* result = new vector<vector<bool>>();
+
+    for (int i = 0; i < num; i++) {
+        vector<bool> temp;
+        Component* tmp = copy();
+        int j = vars.size() - 1;
+        for (auto t : vars) {
+            int iter = 0;
+            temp.push_back((bool)((i >> j) % 2));
+            replace_var(tmp, t.first, (bool)((i >> j--) % 2));
+        }
+        tmp->Simplify();
+        temp.push_back(tmp->get_childs()[0]->get_value());
+        result->push_back(temp);
+    }
+
+    return result;
+}
+
 inline pair<int, int>& priority::to_pair() {
     auto p = new pair<int, int>(global_pr, local_pr);
     return *p;
@@ -12,7 +90,7 @@ inline pair<int, int>& priority::to_pair() {
 void Function::AddChild(Component* comps, int pos) {
     if (pos == INT_MAX) { childs.push_back(comps); return; }
     vector<Component*>::iterator it = childs.begin();
-    if (pos > 0) {
+    if (pos >= 0) {
         advance(it, pos);
         childs.insert(it, comps);
     }
@@ -73,56 +151,78 @@ vector<char*>& Component::Lexer(string equation, string& error_type) {
 
 void Component::Simplify() {
     vector<Component*>& cmps = this->get_childs();
-    for (Component* c : cmps) {
-        if (c->GetType() == CompType::Op) c->Simplify();
-    }
 
     for (int i = 0; i < cmps.size(); i++) {
         Component* c = cmps[i];
-        if (c->GetType() == CompType::Op && (c->get_func_type() == this->get_func_type() || c->get_func_type() == FunctionType::Inv) && c->get_func_type() != FunctionType::Imp) {
-            int j = 0;
-            for (Component* c2 : c->get_childs()) {
-                if (c->get_func_type() == FunctionType::Inv) c2->is_inverted = !c2->is_inverted;
-                this->AddChild(c2, i + j++ + 1);
-                if (c2->GetType() == CompType::Op) c2->Simplify();
+        if (c->GetType() == CompType::Op) {
+            c->Simplify();
+            if ((c->get_func_type() == this->get_func_type() || c->get_func_type() == FunctionType::Inv) && c->get_func_type() != FunctionType::Imp) {
+                int j = 0;
+                for (Component* c2 : c->get_childs()) {
+                    if (c->get_func_type() == FunctionType::Inv)
+                        c2->is_inverted = !c2->is_inverted;
+                    this->AddChild(c2, i + j++ + 1);
+                }
+                cmps.erase(cmps.begin() + i);
+                i--;
+                i += j;
             }
-            cmps.erase(cmps.begin() + i);
-            i--;
-            i += j;
         }
         else if (c->GetType() == CompType::Val && c->is_inverted) {
             c->set_value(c->get_value() ^ true); 
             c->is_inverted = false;
         }
+
+        if (cmps[i]->GetType() == CompType::Op) cmps[i] = SimpifyVals(cmps[i]);
     }
-    FindDuplicates();
 }
 
-void Component::FindDuplicates() {
-    if (GetType() != CompType::Op) return;
-    if (get_childs().size() < 2) return;
+Component* Component::SimpifyVals(Component*& c) {
+    auto& tmp = c->get_childs();
+    bool* result = nullptr;
 
-    vector<Component*> no_dups;
-    for (auto c : get_childs())
+    bool (*logical_func)(bool, bool);
+    switch (c->get_func_type())
     {
-        bool match = false;
-        for (auto c2 : no_dups) {
-            if (c->weak_equal(*c2)) {
-                if (c->is_inverted == c2->is_inverted) {
-                    c2->duplicates += c->duplicates + 1;
-                    c2->inv_dups += c->inv_dups;
-                }
-                else {
-                    c2->inv_dups += c->duplicates + 1;
-                    c2->duplicates += c->inv_dups;
-                }
-                match = true;
-            }
-        }
-        if (!match) 
-            no_dups.push_back(c);
+    case FunctionType::Or:
+        logical_func = _or;
+        break;
+    case FunctionType::And:
+        logical_func = _and;
+        break;
+    case FunctionType::Xor:
+        logical_func = _xor;
+        break;
+    case FunctionType::Equ:
+        logical_func = _equ;
+        break;
+    case FunctionType::Imp:
+        logical_func = _impl;
+        break;
+    default:
+        throw std::exception("");
+        break;
     }
-    set_childs(no_dups);
+
+    for (int i = 0; i < tmp.size(); i++) {
+        if (tmp[i]->GetType() == CompType::Val) {
+            if (!result) result = new bool(tmp[i]->get_value());
+            else *result = logical_func(*result, tmp[i]->get_value());
+            delete tmp[i];
+            tmp.erase(tmp.begin() + i);
+            i--;
+        }
+    }
+
+    if (!result) return c;
+
+    Component* res = new Value(*result);
+    delete result;
+    if (tmp.size()) {
+        c->AddChild(res);
+        return c;
+    }
+    else return res;
 }
 
 Component* Component::Parse(vector<char*>& to_parse) {
@@ -300,11 +400,7 @@ vector<priority*>& Component::PriorityParser(vector<char*>& to_parse) {
 void Function::test_print_tree(int tab) {
     for (int i = 0; i < tab; i++) cout << '\t';
     string out = "";
-    if(duplicates == 0 && inv_dups == 0) out = (is_inverted) ? "(Inv)" : "";
-    else {
-        out = (duplicates > 0) ? "x" + to_string(duplicates) + " " : "";
-        out = (inv_dups > 0) ? "x" + to_string(inv_dups) + "(Inv) " : "";
-    }
+    if (is_inverted) out += "(Inv) ";
     switch (op)
     {
     case FunctionType::Root:
@@ -338,21 +434,64 @@ void Function::test_print_tree(int tab) {
 void Variable::test_print_tree(int tab) {
     for (int i = 0; i < tab; i++) cout << '\t';
     string out = "";
-    if (duplicates == 0 && inv_dups == 0) out = (is_inverted) ? "(Inv)" : "";
-    else {
-        out = (duplicates > 0) ? "x" + to_string(duplicates) + " " : "";
-        out = (inv_dups > 0) ? "x" + to_string(inv_dups) + "(Inv) " : "";
-    }
-    cout << out << name << '\n';
+    if (is_inverted) out += "(Inv) ";
+    cout << out + name << '\n';
 }
 
 void Value::test_print_tree(int tab) {
     for (int i = 0; i < tab; i++) cout << '\t';
     string out = "";
-    if (duplicates == 0 && inv_dups == 0) out = (is_inverted) ? "(Inv)" : "";
-    else {
-        out = (duplicates > 0) ? "x" + to_string(duplicates) + " " : "";
-        out = (inv_dups > 0) ? "x" + to_string(inv_dups) + "(Inv) " : "";
-    }
+    if (is_inverted) out += "(Inv) ";
     cout << out << value << '\n';
+}
+
+
+
+void Variable::print_equation() {
+    string c = (is_inverted) ? "!" : "";
+    cout << c << get_name();
+}
+
+void Value::print_equation() {
+    string c = (is_inverted) ? "!" : "";
+    cout << c << get_value();
+}
+
+void Function::print_equation() {
+    if (get_func_type() == FunctionType::Root) get_childs()[0]->print_equation();
+    else {
+        string op_symbol = "";
+        switch (get_func_type())
+        {
+        case FunctionType::Or:
+            op_symbol += "|";
+            break;
+        case FunctionType::And:
+            op_symbol += "&";
+            break;
+        case FunctionType::Inv:
+            op_symbol += "!";
+            break;
+        case FunctionType::Xor:
+            op_symbol += "^";
+            break;
+        case FunctionType::Equ:
+            op_symbol += "=";
+            break;
+        case FunctionType::Imp:
+            op_symbol += "->";
+            break;
+        default:
+            break;
+        }
+        auto t = get_childs();
+        string c = (is_inverted) ? "!" : "";
+        cout << c << '(';
+        t[0]->print_equation();
+        for (int i = 1; i < t.size(); i++) {
+            cout << op_symbol;
+            t[i]->print_equation();
+        }
+        cout << ')';
+    }
 }

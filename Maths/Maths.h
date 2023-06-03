@@ -1,17 +1,16 @@
 #pragma once
 
-#include "Tools.h"
 #ifndef MATHS_H
 #define MATHS_H
 
-#include <iostream>
+#include "Tools.h"
 #include <iostream>
 #include <stdexcept>
-#include <stack>
 #include <vector>
 #include <string>
 #include <queue>
-#include <unordered_set>
+#include <map>
+#include <stack>
 
 using namespace std;
 using namespace Tools;
@@ -38,11 +37,9 @@ enum class CompType {
 class Component abstract
 {
 public:
-    bool is_inverted = false;
+    Component* copy();
 
-    int duplicates = 0; //Специально для EquationMatcher
-    int inv_dups = 0;
-    bool used = false;
+    bool is_inverted = false;
 
     CompType GetType() { return type; }
 
@@ -59,6 +56,8 @@ public:
     virtual void set_childs(vector<Component*>& c) { return; }
     virtual void AddChild(Component* comps, int pos = INT_MAX) { return; }
 
+    vector<vector<bool>>* get_truth_table(vector<char>* vars_container);
+
     static vector<priority*>& PriorityParser(vector<char*>& to_parse);
 
     virtual char get_name() { return 0; } //Виртуальные функции для Variable
@@ -72,7 +71,10 @@ public:
     inline virtual bool weak_equal(Component& b) = 0;
 
     void Simplify();
-    void FindDuplicates();
+    static Component* SimpifyVals(Component*& cmp);
+
+
+    virtual void print_equation() = 0;
 
 private:
     static Component* GetValuedComponent(char* to_parse);
@@ -82,8 +84,6 @@ private:
     static inline bool IsOperator(char* s) noexcept;
     static inline bool IsOperator(char c) noexcept;
     //static inline bool IsInvertOperator(char* c) noexcept;
-
-    static vector<char*>& ToPrefixNotation(vector<char*> normal);
 
     static void InsertOperation(priority& pr, vector<char*>& to_parse, stack<Component*>*& st, Component*& cmp, Component*& prev, pair<int, int>& old_prior, bool& inverted);
 protected:
@@ -102,6 +102,8 @@ public:
     virtual void set_name(char c) { name = c; }
 
     virtual void test_print_tree(int tab = 0);
+
+    virtual void print_equation();
     //virtual CompType GetType() { return CompType::Var; }
 
     Variable(char c) { name = c; type = CompType::Var; }
@@ -119,6 +121,7 @@ public:
 
     virtual void test_print_tree(int tab = 0);
     //virtual CompType GetType() { return CompType::Val; }
+    virtual void print_equation();
 
     Value(bool d) { value = d; type = CompType::Val; }
 };
@@ -140,6 +143,7 @@ public:
 
     virtual void test_print_tree(int tab = 0);
     //virtual CompType GetType() { return CompType::Op; }
+    virtual void print_equation();
 
     Function(FunctionType o, pair<int, int>& p, bool inv = false) {
         op = o;
