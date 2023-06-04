@@ -74,7 +74,7 @@ public:
     static Component* SimpifyVals(Component*& cmp);
 
 
-    virtual void print_equation() = 0;
+    virtual void print_equation(int old_prior = 0) = 0;
 
 private:
     static Component* GetValuedComponent(char* to_parse);
@@ -103,7 +103,7 @@ public:
 
     virtual void test_print_tree(int tab = 0);
 
-    virtual void print_equation();
+    virtual void print_equation(int old_priority = 0);
     //virtual CompType GetType() { return CompType::Var; }
 
     Variable(char c) { name = c; type = CompType::Var; }
@@ -121,7 +121,7 @@ public:
 
     virtual void test_print_tree(int tab = 0);
     //virtual CompType GetType() { return CompType::Val; }
-    virtual void print_equation();
+    virtual void print_equation(int old_priority = 0);
 
     Value(bool d) { value = d; type = CompType::Val; }
 };
@@ -143,7 +143,7 @@ public:
 
     virtual void test_print_tree(int tab = 0);
     //virtual CompType GetType() { return CompType::Op; }
-    virtual void print_equation();
+    virtual void print_equation(int old_priority = 0);
 
     Function(FunctionType o, pair<int, int>& p, bool inv = false) {
         op = o;

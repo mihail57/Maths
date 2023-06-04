@@ -447,18 +447,18 @@ void Value::test_print_tree(int tab) {
 
 
 
-void Variable::print_equation() {
+void Variable::print_equation(int old_priority) {
     string c = (is_inverted) ? "!" : "";
     cout << c << get_name();
 }
 
-void Value::print_equation() {
+void Value::print_equation(int old_priority) {
     string c = (is_inverted) ? "!" : "";
     cout << c << get_value();
 }
 
-void Function::print_equation() {
-    if (get_func_type() == FunctionType::Root) get_childs()[0]->print_equation();
+void Function::print_equation(int old_priority) {
+    if (get_func_type() == FunctionType::Root) get_childs()[0]->print_equation(prior.second);
     else {
         string op_symbol = "";
         switch (get_func_type())
@@ -486,12 +486,12 @@ void Function::print_equation() {
         }
         auto t = get_childs();
         string c = (is_inverted) ? "!" : "";
-        cout << c << '(';
-        t[0]->print_equation();
+        if(old_priority > prior.second) cout << c << '(';
+        t[0]->print_equation(prior.second);
         for (int i = 1; i < t.size(); i++) {
             cout << op_symbol;
-            t[i]->print_equation();
+            t[i]->print_equation(prior.second);
         }
-        cout << ')';
+        if (old_priority > prior.second) cout << ')';
     }
 }

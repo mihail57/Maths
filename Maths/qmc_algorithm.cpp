@@ -224,8 +224,10 @@ vector<qmc_algorithm_solver::minterm>* qmc_algorithm_solver::petricks_method(vec
 Component* qmc_algorithm_solver::get_result(vector<char>* vars) {
 	pair<int, int> tmp(0, 0);
 	Component* root = new Function(FunctionType::Root, tmp);
+	tmp = pair<int, int>(1, 2);
 	Component* tr_or = new Function(FunctionType::Or, tmp);
 	root->AddChild(tr_or);
+	tmp = pair<int, int>(2, 4);
 	for (auto t : minterms) {
 		Component* c = new Function(FunctionType::And, tmp);
 		int i = 0;
